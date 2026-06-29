@@ -32,7 +32,8 @@ jobs:
           node-version: 20
       - run: npm install --prefix backend
       - run: npm run typecheck --prefix backend
-      - run: npx prisma migrate deploy --prefix backend
+      - run: npx prisma migrate deploy
+        working-directory: backend
       - run: npm test --prefix backend
 
   typecheck-frontend:
