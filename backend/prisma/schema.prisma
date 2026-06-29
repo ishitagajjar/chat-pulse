@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ONLINE
+  OFFLINE
+  AWAY
+
+  @@map("user_status")
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@map("workspace_role")
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+  DM
+  GROUP_DM
+
+  @@map("channel_type")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+
+  @@map("message_type")
+}
+
+model User {
+  id          String     @id @default(uuid())
+  email       String     @unique
+  password    String     @map("password")
+  displayName String     @map("display_name")
+  avatarUrl   String?    @map("avatar_url")
+  status      UserStatus @default(OFFLINE)
+  lastSeenAt  DateTime?  @map("last_seen_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  ownedWorkspaces    Workspace[]       @relation("WorkspaceOwner")
+  workspaceMembers   WorkspaceMember[]
+  createdChannels    Channel[]         @relation("ChannelCreator")
+  channelMembers     ChannelMember[]
+  messages           Message[]
+  reactions          Reaction[]
+  refreshTokens      RefreshToken[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  ownerId   String   @map("owner_id")
+  iconUrl   String?  @map("icon_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  owner    User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members  WorkspaceMember[]
+  channels Channel[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String        @map("workspace_id")
+  userId      String        @map("user_id")
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now()) @map("joined_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+model Channel {
+  id          String      @id @default(uuid())
+  workspaceId String      @map("workspace_id")
+  name        String
+  description String?
+  type        ChannelType @default(PUBLIC)
+  createdById String      @map("created_by_id")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy User            @relation("ChannelCreator", fields: [createdById], references: [id])
+  members   ChannelMember[]
+  messages  Message[]
+
+  @@map("channels")
+}
+
+model ChannelMember {
+  id          String   @id @default(uuid())
+  channelId   String   @map("channel_id")
+  userId      String   @map("user_id")
+  lastReadAt  DateTime @default(now()) @map("last_read_at")
+  joinedAt    DateTime @default(now()) @map("joined_at")
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  channelId String      @map("channel_id")
+  userId    String      @map("user_id")
+  content   String
+  type      MessageType @default(TEXT)
+  fileUrl   String?     @map("file_url")
+  fileName  String?     @map("file_name")
+  fileSize  Int?        @map("file_size")
+  parentId  String?     @map("parent_id")
+  isEdited  Boolean     @default(false) @map("is_edited")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  channel   Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Message?   @relation("MessageThread", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   Message[]  @relation("MessageThread")
+  reactions Reaction[]
+
+  @@map("messages")
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  emoji     String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("reactions")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
